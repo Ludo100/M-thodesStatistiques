@@ -1,2 +1,2 @@
-# M-thodesStatistiques
+# MethodesStatistiques
 TP de Méthodes Statistiques
