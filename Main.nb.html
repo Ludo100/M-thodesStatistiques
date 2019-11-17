@@ -1753,9 +1753,29 @@ summary {
 <p>Try executing this chunk by clicking the <em>Run</em> button within the chunk or by placing your cursor inside it and pressing <em>Ctrl+Shift+Enter</em>.</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGxvdChjYXJzKVxuYGBgIn0= -->
-<pre class="r"><code>plot(cars)</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuI0ltcG9ydCBsaWJyYXJpZXNcbmxpYnJhcnkoXCJoZXJlXCIpICNwYXMgZW5jb3JlIHV0aWxpc8OpXG5gYGAifQ== -->
+<pre class="r"><code>#Import libraries
+library(&quot;here&quot;) #pas encore utilisÃ©</code></pre>
 <!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiV2FybmluZyBtZXNzYWdlczpcbjE6IEluIGtuaXRyOjprbml0KGtuaXRfaW5wdXQsIGtuaXRfb3V0cHV0LCBlbnZpciA9IGVudmlyLCBxdWlldCA9IHF1aWV0LCAgOlxuICBUaGUgZmlsZSBcIk1haW4uUm1kXCIgbXVzdCBiZSBlbmNvZGVkIGluIFVURi04LiBQbGVhc2Ugc2VlIGh0dHBzOi8veWlodWkubmFtZS9lbi8yMDE4LzExL2JpZ2dlc3QtcmVncmV0LWtuaXRyLyBmb3IgbW9yZSBpbmZvLlxuMjogSW4ga25pdHI6OmtuaXQoa25pdF9pbnB1dCwga25pdF9vdXRwdXQsIGVudmlyID0gZW52aXIsIHF1aWV0ID0gcXVpZXQsICA6XG4gIFRoZSBmaWxlIFwiTWFpbi5SbWRcIiBtdXN0IGJlIGVuY29kZWQgaW4gVVRGLTguIFBsZWFzZSBzZWUgaHR0cHM6Ly95aWh1aS5uYW1lL2VuLzIwMTgvMTEvYmlnZ2VzdC1yZWdyZXQta25pdHIvIGZvciBtb3JlIGluZm8uXG4ifQ== -->
+<pre><code>Warning messages:
+1: In knitr::knit(knit_input, knit_output, envir = envir, quiet = quiet,  :
+  The file &quot;Main.Rmd&quot; must be encoded in UTF-8. Please see https://yihui.name/en/2018/11/biggest-regret-knitr/ for more info.
+2: In knitr::knit(knit_input, knit_output, envir = envir, quiet = quiet,  :
+  The file &quot;Main.Rmd&quot; must be encoded in UTF-8. Please see https://yihui.name/en/2018/11/biggest-regret-knitr/ for more info.</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShcIlBlcmZvcm1hbmNlQW5hbHl0aWNzXCIpXG5saWJyYXJ5KFwicXJtZGF0YVwiKVxubGlicmFyeShcInF1YW50bW9kXCIpXG4jRG93bmxvYWQgZGF0YSBvZiB0aGUgRlRTRSAxMDAgYW5kIHRha2UgdGhlIGZpcnN0IDUwIHN0b2NrcyBhbHBoYWJldGljYWxseVxuZGF0YShcIkZUU0VfY29uc3RcIiwgcGFja2FnZSA9IFwicXJtZGF0YVwiKVxuc3RvY2tzIDwtIGxhc3QoRlRTRV9jb25zdFssMTo1MF0sICc0IHllYXInKVxud2Vla2x5X3JldHVybnMgPC0gc2FwcGx5KHN0b2Nrcyx3ZWVrbHlSZXR1cm4pXG5gYGAifQ== -->
+<pre class="r"><code>library(&quot;PerformanceAnalytics&quot;)
+library(&quot;qrmdata&quot;)
+library(&quot;quantmod&quot;)
+#Download data of the FTSE 100 and take the first 50 stocks alphabetically
+data(&quot;FTSE_const&quot;, package = &quot;qrmdata&quot;)
+stocks &lt;- last(FTSE_const[,1:50], '4 year')
+weekly_returns &lt;- sapply(stocks,weeklyReturn)</code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoibWlzc2luZyB2YWx1ZXMgcmVtb3ZlZCBmcm9tIGRhdGFtaXNzaW5nIHZhbHVlcyByZW1vdmVkIGZyb20gZGF0YW1pc3NpbmcgdmFsdWVzIHJlbW92ZWQgZnJvbSBkYXRhbWlzc2luZyB2YWx1ZXMgcmVtb3ZlZCBmcm9tIGRhdGFtaXNzaW5nIHZhbHVlcyByZW1vdmVkIGZyb20gZGF0YW1pc3NpbmcgdmFsdWVzIHJlbW92ZWQgZnJvbSBkYXRhbWlzc2luZyB2YWx1ZXMgcmVtb3ZlZCBmcm9tIGRhdGFtaXNzaW5nIHZhbHVlcyByZW1vdmVkIGZyb20gZGF0YVxuIn0= -->
+<pre><code>missing values removed from datamissing values removed from datamissing values removed from datamissing values removed from datamissing values removed from datamissing values removed from datamissing values removed from datamissing values removed from data</code></pre>
+<!-- rnb-output-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <p>Add a new chunk by clicking the <em>Insert Chunk</em> button on the toolbar or by pressing <em>Ctrl+Alt+I</em>.</p>
@@ -1763,7 +1783,7 @@ summary {
 <p>The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike <em>Knit</em>, <em>Preview</em> does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.</p>
 <!-- rnb-text-end -->
 
-<div id="rmd-source-code">LS0tDQp0aXRsZTogIlRQIg0Kb3V0cHV0OiBodG1sX25vdGVib29rDQotLS0NCg0KVGhpcyBpcyBhbiBbUiBNYXJrZG93bl0oaHR0cDovL3JtYXJrZG93bi5yc3R1ZGlvLmNvbSkgTm90ZWJvb2suIFdoZW4geW91IGV4ZWN1dGUgY29kZSB3aXRoaW4gdGhlIG5vdGVib29rLCB0aGUgcmVzdWx0cyBhcHBlYXIgYmVuZWF0aCB0aGUgY29kZS4gDQoNClRyeSBleGVjdXRpbmcgdGhpcyBjaHVuayBieSBjbGlja2luZyB0aGUgKlJ1biogYnV0dG9uIHdpdGhpbiB0aGUgY2h1bmsgb3IgYnkgcGxhY2luZyB5b3VyIGN1cnNvciBpbnNpZGUgaXQgYW5kIHByZXNzaW5nICpDdHJsK1NoaWZ0K0VudGVyKi4gDQoNCmBgYHtyfQ0KcGxvdChjYXJzKQ0KYGBgDQoNCkFkZCBhIG5ldyBjaHVuayBieSBjbGlja2luZyB0aGUgKkluc2VydCBDaHVuayogYnV0dG9uIG9uIHRoZSB0b29sYmFyIG9yIGJ5IHByZXNzaW5nICpDdHJsK0FsdCtJKi4NCg0KV2hlbiB5b3Ugc2F2ZSB0aGUgbm90ZWJvb2ssIGFuIEhUTUwgZmlsZSBjb250YWluaW5nIHRoZSBjb2RlIGFuZCBvdXRwdXQgd2lsbCBiZSBzYXZlZCBhbG9uZ3NpZGUgaXQgKGNsaWNrIHRoZSAqUHJldmlldyogYnV0dG9uIG9yIHByZXNzICpDdHJsK1NoaWZ0K0sqIHRvIHByZXZpZXcgdGhlIEhUTUwgZmlsZSkuDQoNClRoZSBwcmV2aWV3IHNob3dzIHlvdSBhIHJlbmRlcmVkIEhUTUwgY29weSBvZiB0aGUgY29udGVudHMgb2YgdGhlIGVkaXRvci4gQ29uc2VxdWVudGx5LCB1bmxpa2UgKktuaXQqLCAqUHJldmlldyogZG9lcyBub3QgcnVuIGFueSBSIGNvZGUgY2h1bmtzLiBJbnN0ZWFkLCB0aGUgb3V0cHV0IG9mIHRoZSBjaHVuayB3aGVuIGl0IHdhcyBsYXN0IHJ1biBpbiB0aGUgZWRpdG9yIGlzIGRpc3BsYXllZC4NCg==</div>
+<div id="rmd-source-code">LS0tDQp0aXRsZTogIlRQIg0Kb3V0cHV0OiBodG1sX25vdGVib29rDQotLS0NCg0KVGhpcyBpcyBhbiBbUiBNYXJrZG93bl0oaHR0cDovL3JtYXJrZG93bi5yc3R1ZGlvLmNvbSkgTm90ZWJvb2suIFdoZW4geW91IGV4ZWN1dGUgY29kZSB3aXRoaW4gdGhlIG5vdGVib29rLCB0aGUgcmVzdWx0cyBhcHBlYXIgYmVuZWF0aCB0aGUgY29kZS4gDQoNClRyeSBleGVjdXRpbmcgdGhpcyBjaHVuayBieSBjbGlja2luZyB0aGUgKlJ1biogYnV0dG9uIHdpdGhpbiB0aGUgY2h1bmsgb3IgYnkgcGxhY2luZyB5b3VyIGN1cnNvciBpbnNpZGUgaXQgYW5kIHByZXNzaW5nICpDdHJsK1NoaWZ0K0VudGVyKi4gDQoNCmBgYHtyfQ0KI0ltcG9ydCBsaWJyYXJpZXMNCmxpYnJhcnkoImhlcmUiKSAjcGFzIGVuY29yZSB1dGlsaXPpDQpsaWJyYXJ5KCJQZXJmb3JtYW5jZUFuYWx5dGljcyIpDQpsaWJyYXJ5KCJxcm1kYXRhIikNCmxpYnJhcnkoInF1YW50bW9kIikNCg0KI0Rvd25sb2FkIGRhdGEgb2YgdGhlIEZUU0UgMTAwIGFuZCB0YWtlIHRoZSBmaXJzdCA1MCBzdG9ja3MgYWxwaGFiZXRpY2FsbHkNCmRhdGEoIkZUU0VfY29uc3QiLCBwYWNrYWdlID0gInFybWRhdGEiKQ0Kc3RvY2tzIDwtIGxhc3QoRlRTRV9jb25zdFssMTo1MF0sICc0IHllYXInKQ0Kd2Vla2x5X3JldHVybnMgPC0gc2FwcGx5KHN0b2Nrcyx3ZWVrbHlSZXR1cm4pDQoNCmBgYA0KDQpBZGQgYSBuZXcgY2h1bmsgYnkgY2xpY2tpbmcgdGhlICpJbnNlcnQgQ2h1bmsqIGJ1dHRvbiBvbiB0aGUgdG9vbGJhciBvciBieSBwcmVzc2luZyAqQ3RybCtBbHQrSSouDQoNCldoZW4geW91IHNhdmUgdGhlIG5vdGVib29rLCBhbiBIVE1MIGZpbGUgY29udGFpbmluZyB0aGUgY29kZSBhbmQgb3V0cHV0IHdpbGwgYmUgc2F2ZWQgYWxvbmdzaWRlIGl0IChjbGljayB0aGUgKlByZXZpZXcqIGJ1dHRvbiBvciBwcmVzcyAqQ3RybCtTaGlmdCtLKiB0byBwcmV2aWV3IHRoZSBIVE1MIGZpbGUpLg0KDQpUaGUgcHJldmlldyBzaG93cyB5b3UgYSByZW5kZXJlZCBIVE1MIGNvcHkgb2YgdGhlIGNvbnRlbnRzIG9mIHRoZSBlZGl0b3IuIENvbnNlcXVlbnRseSwgdW5saWtlICpLbml0KiwgKlByZXZpZXcqIGRvZXMgbm90IHJ1biBhbnkgUiBjb2RlIGNodW5rcy4gSW5zdGVhZCwgdGhlIG91dHB1dCBvZiB0aGUgY2h1bmsgd2hlbiBpdCB3YXMgbGFzdCBydW4gaW4gdGhlIGVkaXRvciBpcyBkaXNwbGF5ZWQuDQo=</div>
 
 
 

@@ -8,7 +8,17 @@ This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
 
 ```{r}
-plot(cars)
+#Import libraries
+library("here") #pas encore utilisé
+library("PerformanceAnalytics")
+library("qrmdata")
+library("quantmod")
+
+#Download data of the FTSE 100 and take the first 50 stocks alphabetically
+data("FTSE_const", package = "qrmdata")
+stocks <- last(FTSE_const[,1:50], '4 year')
+weekly_returns <- sapply(stocks,weeklyReturn)
+
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
