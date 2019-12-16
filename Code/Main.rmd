@@ -1,0 +1,787 @@
+---
+title: "Asset allocation within the FTSE 100"
+output:
+  html_notebook:
+    code_folding: hide
+  pdf_document: default
+---
+# In-Sample sensitivity analysis 
+
+In order to perform analysis on the FTSE 100, the data was imported form the qrmdata library using the FTSE 100 index. The past four years of weekly available data have been used for the analysis starting the 2012-01-02 to 2015-12-31. The first step of our analysis has been to perform an in-sample sensitivity analysis using random portfolios of 5, 10 and 25 stocks within the first 49 stocks of the FTSE 100 (one stock was removed due to missing data). Two optimisation methods have been considered, the minimum variance approach and the maximum diversification approach. In both cases, the goal is to minimise the portfolio volatility without considering returns as an input for the optimisation. The historical covariance matrix of the whole sample is used for the in-sample analysis while imposing the long-only constraints on holdings. In order to assess the in-sample performance of the two optimisation methods, we drawn 500 random portfolio without replacement of 5,10 and 25 stocks. Depending of the correlation between stocks of the random portfolio and their individual volatility, the set risk/return profile achievable will change. Low volatility stocks that had low correlation will create portfolios with lower volatility. On the other hand, we should observe a positive relation between the risk and return of the portfolios. As expected, increasing the dimension of the covariance matrix reduced the volatility of the portfolios and the dispersion of returns and volatility. To illustrate the in-sample results, we compared the returns and volatility of the two optimisation methods for different number of stocks in a portfolio. 
+
+```{r}
+#Import libraries
+library("here") #pas encore utilise
+library("xts")
+library("PerformanceAnalytics") #pas encore utilise
+library("qrmdata")
+library("quantmod")
+library("RiskPortfolios")
+library("zoo")
+library("ggplot2")
+library("ggpubr")
+library("RColorBrewer")
+library("ggthemes")
+library("timetk")
+library("tidyr")
+source("Functions.R")
+
+#In-sample sensitivity analysis
+
+#Download data of the FTSE 100 and take the first 50 stocks alphabetically
+data("FTSE_const", package = "qrmdata")
+stocks <- last(FTSE_const[,1:50], '4 year')
+weekly_returns <- sapply(stocks,weeklyReturn)
+
+#Merge the list weekly_returns into an xts object again to do the calculations
+rets <- do.call("merge",weekly_returns)
+names(rets) <- colnames(stocks)
+
+#Fill NA with the next observation (fill backward)
+rets <- na.locf(rets)
+rets$DLG.L <- NULL
+nb_stocks <- ncol(rets)
+nb_weeks <- nrow(rets)
+dates <- as.Date(tk_index(rets))
+
+#Estimating the covariance matrix by handling missing values with casewise deletion
+cov_matrix <- cov(rets, use="complete.obs")
+risk_free <- 0.0157 #1-month treasury yield as of 2019-12-12
+
+#Compute Optimal portfolio weights for d=5,10,25 with random sub-universe
+nb_universe <- 500
+
+minvol_5 <- InSampleStats(5, nb_universe, rets, "minvol", cov_matrix)
+minvol_10 <- InSampleStats(10, nb_universe, rets, "minvol", cov_matrix)
+minvol_25 <- InSampleStats(25, nb_universe, rets, "minvol", cov_matrix)
+maxdiv_5 <- InSampleStats(5, nb_universe, rets, "maxdiv", cov_matrix)
+maxdiv_10 <- InSampleStats(10, nb_universe, rets, "maxdiv", cov_matrix)
+maxdiv_25 <- InSampleStats(25, nb_universe, rets, "maxdiv", cov_matrix)
+
+# Analysis of portfolio volatilities 
+
+# Create data frame for ggplot2 
+df_volatilities_minvol <- data.frame(cbind(rbind(minvol_5$volatility, minvol_10$volatility, minvol_25$volatility),
+                              (t(cbind(t(rep(5,nb_universe)),t(rep(10,nb_universe)),t(rep(25,nb_universe)))))))
+
+df_volatilities_maxdiv <- data.frame(cbind(rbind(maxdiv_5$volatility, maxdiv_10$volatility, maxdiv_25$volatility),
+                              (t(cbind(t(rep(5,nb_universe)),t(rep(10,nb_universe)),t(rep(25,nb_universe)))))))
+# Set boxplot axe limit 
+lb = min(quantile(df_volatilities_minvol[,1])[1],quantile(df_volatilities_maxdiv[,1])[1])-0.05
+ub = max(quantile(df_volatilities_minvol[,1])[5],quantile(df_volatilities_maxdiv[,1])[5])
+
+# Graph of volatility distribution given optimisation methods
+graph_minvol_vol <- ggplot(data = df_volatilities_minvol, aes(x=as.factor(X2), y=X1)) + 
+                    geom_boxplot(aes(fill=as.factor(X2)) , show.legend = FALSE) + 
+                    labs(title = "Minimum variance optimisation") + 
+                    theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                    xlab("Number of holdings") + ylab(" Volatility ") + ylim(lb,ub)+
+                    scale_fill_brewer(palette="YlOrRd")
+
+graph_maxdiv_vol <- ggplot(data = df_volatilities_maxdiv, aes(x=as.factor(X2),y=X1)) +
+                    geom_boxplot(aes(fill=as.factor(X2)) , show.legend = FALSE) +
+                    labs(title="Maximum diversification optimisation") +
+                    theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                    xlab("Number of holdings") + ylab(" Volatility ")  + ylim(lb,ub) +
+                    scale_fill_brewer(palette="Blues")
+
+ggarrange(graph_minvol_vol,graph_maxdiv_vol,labels = c("A", "B"),
+          common.legend = TRUE, legend = "bottom")
+```
+
+Comparing the in-sample performance of the two optimisation method, the minimum variance approach does a better job to reduce the overall volatility by systematically having a lower median for a portfolio of 5, 10 and 25 holdings. The interquartile range for the minimum variance is also lower indicating more robust results compared to the maximum diversification. The number of outliers for a 5 stocks portfolio is higher for both methodology then larger portfolios.   
+
+```{r}
+#Annual returns analysis 
+
+# Create data frame of returns for ggplot2 
+df_returns_minvol <- data.frame(cbind(rbind(minvol_5$annual_returns, minvol_10$annual_returns, minvol_25$annual_returns),
+                              (t(cbind(t(rep(5,nb_universe)),t(rep(10,nb_universe)),t(rep(25,nb_universe)))))))
+
+df_returns_maxdiv <- data.frame(cbind(rbind(maxdiv_5$annual_returns, maxdiv_10$annual_returns, maxdiv_25$annual_returns),
+                              (t(cbind(t(rep(5,nb_universe)),t(rep(10,nb_universe)),t(rep(25,nb_universe)))))))
+
+# Set axe limit for the graph 
+lb = min(quantile(df_returns_minvol[,1])[1],quantile(df_returns_maxdiv[,1])[1])+0.05
+ub = max(quantile(df_returns_minvol[,1])[5],quantile(df_returns_maxdiv[,1])[5])-0.1
+
+# Graph of returns distribution given optimisation method
+df_returns_minvol <- data.frame(cbind(rbind(minvol_5$annual_returns, minvol_10$annual_returns, minvol_25$annual_returns),
+                              (t(cbind(t(rep(5,nb_universe)),t(rep(10,nb_universe)),t(rep(25,nb_universe)))))))
+
+df_returns_maxdiv <- data.frame(cbind(rbind(maxdiv_5$annual_returns, maxdiv_10$annual_returns, maxdiv_25$annual_returns),
+                              (t(cbind(t(rep(5,nb_universe)),t(rep(10,nb_universe)),t(rep(25,nb_universe)))))))
+
+graph_minvol_ret <- ggplot(data = df_volatilities_minvol, aes(x=as.factor(X2), y=X1)) + 
+                    geom_boxplot(aes(fill=as.factor(X2)) , show.legend = FALSE) + 
+                    labs(title = "Minimum variance optimisation") + 
+                    theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                    xlab("Number of holdings") + ylab(" Returns ") + ylim(lb,ub) +
+                    scale_fill_brewer(palette="YlOrRd")
+
+graph_maxdiv_ret <- ggplot(data = df_volatilities_maxdiv, aes(x=as.factor(X2),y=X1)) +
+                    geom_boxplot(aes(fill=as.factor(X2)) , show.legend = FALSE) +
+                    labs(title="Maximum diversification optimisation") +
+                    theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                    xlab("Number of holdings") + ylab(" Returns ")  + ylim(lb,ub)+
+                     scale_fill_brewer(palette="Blues")
+
+ggarrange(graph_minvol_ret ,graph_maxdiv_ret,labels = c("C", "D"),
+          common.legend = TRUE, legend = "bottom")
+```   
+As discussed earlier, due to a higher volatility of the maximum diversification method, the in-sample returns are higher for the period tested. The interquartile range is also smaller for returns of the minimum variance method.
+
+```{r}
+#In-sample uncertainty
+
+# Question 1 & 2
+library("mvtnorm")
+library("IntroCompFinR")  #To install this package use: install.packages("IntroCompFinR", repos="http://R-Forge.R-project.org") (for efficient frontier)
+library("MASS")
+
+#Fit the multivariate student-t by trying different degrees of freedom
+n_df <- 50
+vector_df <- seq(from = 1, to = 20, length.out = n_df)
+all_likelihood <- rep(0, n_df)
+
+all_mu <- matrix(nrow=n_df, ncol=nb_stocks)
+all_scale <- array(0, c(nb_stocks, nb_stocks, n_df))
+
+for(i in 1:n_df) {
+  
+  # MLE estimation of location and covariance
+  df <- vector_df[i]
+  fit <- cov.trob(rets, nu = df, cor = FALSE)
+
+  all_mu[i,] <- fit$center
+  all_scale[,,i] <- (df - 2) * fit$cov / df
+  all_likelihood[i] <- sum(dmvt(x=rets, delta=all_mu[i,], sigma=all_scale[,,i], df=df, log=TRUE))
+}
+
+best_fit_df <- vector_df[which.max(all_likelihood)]
+best_fit_mu <- all_mu[which.max(all_likelihood),]
+best_fit_scale <- all_scale[,,which.max(all_likelihood)]
+
+#Normal parameters
+mu <- colMeans(rets)
+Sigma <- cov(rets)
+n_sim <- 100
+n_ptf <- 25
+
+parametric_normal <- ParametricBootstrapInSample(rets, risk_free, mu, Sigma, n_sim, n_ptf, "normal")
+parametric_student <- ParametricBootstrapInSample(rets, risk_free, best_fit_mu, best_fit_scale, 
+                                                  n_sim, n_ptf, "student", df=best_fit_df)
+```
+
+A distribution of efficient frontiers was plotted for both the Gaussian parametric resampling method and the Student-t parametric method. This could be achieved by computing the efficient frontier at each resampling iterations. Those graphs show the instability of the Markowitz optimisation method, based on the sensibility to the inputs. We also see that the efficient fontiers obtained with the Student method are more spread out and achieve a lower expected return than the ones obtained with the Gaussian method, which can mostly be explained by the fatter tails of the Student and the higher probability of large losses.
+
+```{r}
+#Plot all the efficient frontiers
+matplot(x=t(parametric_normal$frontier_boot_sd), y=t(parametric_normal$frontier_boot_er), type="l", col = "dark gray",
+        xlab = "Volatility", ylab = "Expected returns", main= "Efficient frontier using normal parametric resampling")
+```
+
+```{r}
+#Plot all the efficient frontiers
+matplot(x=t(parametric_student$frontier_boot_sd), y=t(parametric_student$frontier_boot_er), type="l", col = "dark gray",
+        xlab = "Volatility", ylab = "Expected returns", main= "Efficient frontier using t-Student parametric resampling")
+```
+
+```{r}
+#Question 3
+
+#Calculate the covariance matrix using shkrinkage methods
+Sigma <- covEstimation(rets, control = list(type='factor', K=1))
+parametric_normal_shrink_fac1 <- ParametricBootstrapInSample(rets, risk_free, mu, Sigma, n_sim, n_ptf, "normal")
+
+Sigma <- covEstimation(rets, control = list(type='factor', K=3))
+parametric_normal_shrink_fac3 <- ParametricBootstrapInSample(rets, risk_free, mu, Sigma, n_sim, n_ptf, "normal")
+
+Sigma <- covEstimation(rets, control = list(type='lw'))
+parametric_normal_shrink_lw <- ParametricBootstrapInSample(rets, risk_free, mu, Sigma, n_sim, n_ptf, "normal")
+
+#Question 4
+boot_iid_samples <- matrix(0, nrow = n_sim, ncol = nb_weeks)
+
+block_size <- 3
+n_blocks <- ceiling(nb_weeks / block_size)
+boot_block_samples <- matrix(0, nrow = n_sim, ncol = nb_weeks)
+
+#Find the id of the bootstrap
+for (i in 1:n_sim){
+  
+  boot_iid_samples[i,] <- sample(x = 1:nb_weeks, size = nb_weeks, replace = TRUE)
+  
+  boot_b <- c()
+  
+  for (j in 1:n_blocks){
+    id_blocks_start <- sample(x = 1:nb_weeks, size = 1)
+    boot_b <- c(boot_b, c(1:nb_weeks, 1:nb_weeks)[id_blocks_start:(id_blocks_start+block_size-1)])
+  }
+  
+  boot_block_samples[i,] <- boot_b[1:nb_weeks]
+}
+
+parameters_boot_iid <- ResamplingInSample(rets, risk_free, n_sim, boot_iid_samples, nb_weeks, nb_stocks)
+parameters_boot_block <- ResamplingInSample(rets, risk_free, n_sim, boot_block_samples,nb_weeks, nb_stocks)
+
+nb_res = 100
+
+# Creation of dataframe for various covariance estimation and min variance optimisation 
+df_minvol_mu <- data.frame(cbind(rbind(matrix(parametric_normal$mu_minvol, nrow = nb_res, ncol =1), 
+                            matrix(parametric_student$mu_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac1$mu_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac3$mu_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_lw$mu_minvol,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_iid$mu_minvol,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_block$mu_minvol,nrow = nb_res, ncol =1)), 
+                            (t(cbind(t(rep('Normal',nb_res)),t(rep('t-Student',nb_res)),
+                            t(rep('S1',nb_res)),t(rep('S2',nb_res)),
+                            t(rep('S3',nb_res)),t(rep('Resamp 1',nb_res)),
+                            t(rep('Resamp 2',nb_res)))))))
+
+df_minvol_sigma <- data.frame(cbind(rbind(matrix(parametric_normal$sigma_minvol, nrow = nb_res, ncol =1), 
+                            matrix(parametric_student$sigma_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac1$sigma_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac3$sigma_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_lw$sigma_minvol,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_iid$sigma_minvol,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_block$sigma_minvol,nrow = nb_res, ncol =1)), 
+                            (t(cbind(t(rep('Normal',nb_res)),t(rep('t-Student',nb_res)),
+                            t(rep('S1',nb_res)),t(rep('S2',nb_res)),
+                            t(rep('S3',nb_res)),t(rep('Resamp 1',nb_res)),
+                            t(rep('Resamp 2',nb_res)))))))
+
+df_minvol_sharpe <- data.frame(cbind(rbind(matrix(parametric_normal$sharpe_minvol, nrow = nb_res, ncol =1), 
+                            matrix(parametric_student$sharpe_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac1$sharpe_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac3$sharpe_minvol,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_lw$sharpe_minvol,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_iid$sharpe_minvol,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_block$sharpe_minvol,nrow = nb_res, ncol =1)), 
+                            (t(cbind(t(rep('Normal',nb_res)),t(rep('t-Student',nb_res)),
+                            t(rep('S1',nb_res)),t(rep('S2',nb_res)),
+                            t(rep('S3',nb_res)),t(rep('Resamp 1',nb_res)),
+                            t(rep('Resamp 2',nb_res)))))))
+                            
+# Creation of boxplot for min variance optimisation                           
+graph_minvol_mu =   ggplot(data = df_minvol_mu, aes(x=as.character(X2), y=as.numeric(paste(X1)), fill =as.character(X2)))+ 
+                    geom_boxplot() + labs(title = "Minimum variance optimisation returns") + 
+                    theme(plot.title = element_text(hjust = 0.5 ,size = 12),legend.position = "none") + 
+                    xlab("Covariance matrix estimation methodology") + ylab("Returns") +
+                    scale_fill_brewer(palette="YlOrRd")
+
+graph_minvol_sigma = ggplot(data = df_minvol_sigma, aes(x=as.character(X2), y=as.numeric(paste(X1)), fill =as.character(X2)))+ 
+                     geom_boxplot() + labs(title = "Minimum variance optimisation volatility") + 
+                     theme(plot.title = element_text(hjust = 0.5 ,size = 12),legend.position = "none") + 
+                     xlab("Covariance matrix estimation methodology") + ylab("Volatility") +
+                     scale_fill_brewer(palette="YlOrRd")
+
+graph_minvol_sharpe = ggplot(data = df_minvol_sharpe, aes(x=as.character(X2), y=as.numeric(paste(X1)), fill =as.character(X2)))+ 
+                     geom_boxplot() + labs(title = "Minimum variance optimisation sharpe ratio") + 
+                     theme(plot.title = element_text(hjust = 0.5 ,size = 12),legend.position = "none") + 
+                     xlab("Covariance matrix estimation methodology") + ylab("Sharpe ratio") +
+                     scale_fill_brewer(palette="YlOrRd")
+```
+# In Sample Uncertainty
+
+The first assignment of this section was to test the parameter uncertainty in the in-sample performance using a multivariate Gaussian model fit on the data. General steps of testing parameter uncertainty are as follows : fit the Gaussian model on the data to get the initial vector of expected returns and covariance matrix (mu and sigma), simulate a certain number of returns using the prior estimated moments, compute the performance measures using the new moments coming from the simulated values, repeat the two last steps in order to generate a performance distribution.
+
+The next step was to to the same thing, but fitting the data on a Student distribution. However, fitting the data was a little bit less staightforward than for the multivariate Normal. In fact, since there is a new parameter, the degrees of freedom (df thereafter), it was not possible to fit all the parameters at the same time. The method used was to loop through a vector of different dfs and then fitting the two other parameters with the df fixed. Then, the best fit estimators were the one maximising the log-likelihood.
+
+Different shrinkage methods then needed to be tested. Shrinkage methods are used to make the covariance matrix more robust, and to prevent big swings out-of-sample. Three methods were implemented, respectively the factor method with 1 and 3 factors, and the Ledoit and Wolf method. The covEstimation function from the RiskPortfolios package was used. Factor methods produces different factors explaining the returns, and then computes the covariance on those factors, without using the sample covariance matrix. On the contrary, the LW method uses the sample covariance matrix in a weighted average with a factor method.
+
+The fourth step was to test portfolio resampling approaches, namely iid bootstrap, block bootstrap and Gaussian parametric resampling. However, the Gaussian parametric resampling was tackled in the first step so we did not do it again. The iid bootstrap method consists of drawing a number of weeks from the original sample with replacement. The block bootstrap is similar, but the resampling is done with blocks of weeks (three in our case), in order to keep more information about the time series. Once the new sample in produced, it can be used to perform the same steps as in the first question.
+
+Those four steps were applied to two types of portfolios : the minimum variance portfolio and the maximum diversification portfolio.
+```{r}
+print(graph_minvol_mu)
+```
+First, given that the student-t distribution has fatter tails than a normal distribution, its returns will be more spread out and so will the simulations. This implies that the weights of the optimal portfolios will be more spread out, hence the higher uncertainty in the in-sample parameters with the student-t model. Both resampling method used appear to outperfom the t-student calibration, since their returns are tighter and the median is similar. Those methods are similar to the normal calibration. The shrinkage with one factor yield significantly higher expected returns than the other techniques, but its returns are also more volatile, which is not desired in a portfolio. The second and third shrinkage method performs surpisingly well on a absolute return standpoint.
+
+```{r}
+print(graph_minvol_sigma)
+```
+
+On the variance side, the first thing to note is that the first shrinkage method is immediatly out of the table, since its variance is much higher and volatile than its peers'. Resampling methods are still really similar, and they clearly outperform the Normal and Student fits on a variance standpoint. Variances for the second and third shrinkage method are not very volatile, but they are higher than the first three boxes. It is possible to see that the Student fit does not perform well on the variance side, since its box is higher and wider than most other boxes, which can also be explained by the fatter tails implied by this model.
+
+```{r}
+print(graph_minvol_sharpe)
+```
+Now, combining the risk and return measures with the risk-free rate, the Sharpe ratio can be produced. The Normal fit clearly outperforms all other methods, since it has a greater (or similar) Sharpe with less dispersion. Those results could have been predicted to a certain degree because the covariance matrix used in the Normal fit is the best fit for the in-sample data, while other methods should improve performance in out-of-sample tests.
+
+```{r}
+# Creation of dataframe for various covariance estimation and max diversification variance optimisation 
+df_maxdiv_mu <- data.frame(cbind(rbind(matrix(parametric_normal$mu_maxdiv, nrow = nb_res, ncol =1), 
+                            matrix(parametric_student$mu_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac1$mu_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac3$mu_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_lw$mu_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_iid$mu_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_block$mu_maxdiv,nrow = nb_res, ncol =1)), 
+                            (t(cbind(t(rep('Normal',nb_res)),t(rep('t-Student',nb_res)),
+                            t(rep('S1',nb_res)),t(rep('S2',nb_res)),
+                            t(rep('S3',nb_res)),t(rep('Resamp 1',nb_res)),
+                            t(rep('Resamp 2',nb_res)))))))
+
+df_maxdiv_sigma <- data.frame(cbind(rbind(matrix(parametric_normal$sigma_maxdiv, nrow = nb_res, ncol =1), 
+                            matrix(parametric_student$sigma_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac1$sigma_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac3$sigma_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_lw$sigma_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_iid$sigma_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_block$sigma_maxdiv,nrow = nb_res, ncol =1)), 
+                            (t(cbind(t(rep('Normal',nb_res)),t(rep('t-Student',nb_res)),
+                            t(rep('S1',nb_res)),t(rep('S2',nb_res)),
+                            t(rep('S3',nb_res)),t(rep('Resamp 1',nb_res)),
+                            t(rep('Resamp 2',nb_res)))))))
+
+df_maxdiv_sharpe <- data.frame(cbind(rbind(matrix(parametric_normal$sharpe_maxdiv, nrow = nb_res, ncol =1), 
+                            matrix(parametric_student$sharpe_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac1$sharpe_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_fac3$sharpe_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parametric_normal_shrink_lw$sharpe_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_iid$sharpe_maxdiv,nrow = nb_res, ncol =1),
+                            matrix(parameters_boot_block$sharpe_maxdiv,nrow = nb_res, ncol =1)), 
+                            (t(cbind(t(rep('Normal',nb_res)),t(rep('t-Student',nb_res)),
+                            t(rep('S1',nb_res)),t(rep('S2',nb_res)),
+                            t(rep('S3',nb_res)),t(rep('Resamp 1',nb_res)),
+                            t(rep('Resamp 2',nb_res)))))))
+                            
+# creation of boxplot for min variance optimisation                           
+graph_maxdiv_mu =   ggplot(data = df_maxdiv_mu, aes(x=as.character(X2), y=as.numeric(paste(X1)), fill =as.character(X2)))+ 
+                    geom_boxplot() + labs(title = "Maximum diversification optimisation returns") + 
+                    theme(plot.title = element_text(hjust = 0.5 ,size = 12),legend.position = "none") + 
+                    xlab("Covariance matrix estimation methodology") + ylab("Returns") +
+                    scale_fill_brewer(palette="Blues")
+
+graph_maxdiv_sigma = ggplot(data = df_maxdiv_sigma, aes(x=as.character(X2), y=as.numeric(paste(X1)), fill =as.character(X2)))+ 
+                     geom_boxplot() + labs(title = "Maximum diversification optimisation volatility") + 
+                     theme(plot.title = element_text(hjust = 0.5 ,size = 12),legend.position = "none") + 
+                     xlab("Covariance matrix estimation methodology") + ylab("Volatility") +
+                     scale_fill_brewer(palette="Blues")
+
+graph_maxdiv_sharpe = ggplot(data = df_maxdiv_sharpe, aes(x=as.character(X2), y=as.numeric(paste(X1)), fill =as.character(X2)))+ 
+                     geom_boxplot() + labs(title = "Maximum diversification optimisation sharpe ratio") + 
+                     theme(plot.title = element_text(hjust = 0.5 ,size = 12),legend.position = "none") + 
+                     xlab("Covariance matrix estimation methodology") + ylab("Sharpe ratio") +
+                     scale_fill_brewer(palette="Blues")
+
+```
+
+The graphs below indicate that the general conclusions according to which portfolio yields the best results are the same. However, the absolute value (y axis) differs greatly. In fact, the expected returns are higher for the maximum diversification, while the variance is also higher. The latter is trivial since the last test was on the minimum variance portfolio. Still, the greater expected returns outweights the higher variance, so the Sharpe ratios are higher for the maximum diversification portfolios than for the minimum variance portfolios.
+
+```{r}
+print(graph_maxdiv_mu)
+```
+
+```{r}
+print(graph_maxdiv_sigma)
+```
+
+```{r}
+print(graph_maxdiv_sharpe)
+```
+# Out-of-sample impact 
+
+While in-sample analysis is a good starting point, it is imperative to test the strategy out-of-sample. We want to assess if the optimisation methodology choosen would create value if it was used as an investment strategy. In addition to the minimum variance and maximum diversification portfolios, we added the naive equally weighted portfolio. Given the difficulty of outperforming systematically the equally weighted portfolio as demonstrated by Demiguel et al. (2009), it would serve as a reference to benchmark our long-only portfolio. We used a 52 weeks rolling window to calculate the covariance matrix and estimate the weights using the two optimisation method in order to rebalance on a weekly basis and calculate the out-of-sample performance.
+
+```{r}
+## Out-of-sample Impact 
+initial_window <- 52
+n_sim <- 1000
+nb_stocks_backtestOOS <- 25
+
+N <- ncol(rets[,1:nb_stocks_backtestOOS])
+t <- nrow(rets[,1:nb_stocks_backtestOOS])
+block_size <- 3
+weeks_backtest <- (t-initial_window-1)
+n_blocks <- ceiling(weeks_backtest/block_size)
+
+boot_block_samples <- matrix(0, nrow = n_sim, ncol = weeks_backtest)
+
+weights_minvol <- matrix(nrow=t-initial_window, ncol=N)
+weights_maxdiv <- matrix(nrow=t-initial_window, ncol=N)
+weights_minvol_shrink <- matrix(nrow=t-initial_window, ncol=N)
+weights_maxdiv_shrink <- matrix(nrow=t-initial_window, ncol=N)
+weights_minvol_resampling <- matrix(nrow=t-initial_window, ncol=N)
+weights_maxdiv_resampling <- matrix(nrow=t-initial_window, ncol=N)
+weights_eq <- c(rep(1/N,N))
+
+returns_minvol <- matrix(nrow=weeks_backtest,1)
+returns_maxdiv <- matrix(nrow=weeks_backtest,1)
+returns_minvol_shrink <- matrix(nrow=weeks_backtest,1)
+returns_maxdiv_shrink <- matrix(nrow=weeks_backtest,1)
+returns_minvol_resampling <- matrix(nrow=weeks_backtest,1)
+returns_maxdiv_resampling <- matrix(nrow=weeks_backtest,1)
+returns_eq <- matrix(nrow=weeks_backtest,1)
+
+for (i in 1:(t-initial_window-1)){
+  
+  rets_window <- rets[i:(i+initial_window-1),1:nb_stocks_backtestOOS]
+  cov_mat <- cov(rets_window)
+  
+  shrink_cov <- covEstimation(rets_window, control = list(type='lw'))
+  
+  weights_minvol[i,] <- optimalPortfolio(cov_mat, control=list(type="minvol", constraint = 'lo'))
+  weights_maxdiv[i,] <- optimalPortfolio(cov_mat,control=list(type="maxdiv", constraint = 'lo'))
+  
+  weights_minvol_shrink[i,] <- optimalPortfolio(shrink_cov, control=list(type="minvol", constraint = 'lo'))
+  weights_maxdiv_shrink[i,] <-  optimalPortfolio(shrink_cov,control=list(type="maxdiv", constraint = 'lo'))
+  
+  weights_minvol_resampling[i,] <- colMeans(ParametricBootstrapOutOfSample(nb_stocks_backtestOOS,risk_free,
+                                                                  colMeans(rets_window), cov_mat, 100, "minvol"))
+  weights_maxdiv_resampling[i,] <- colMeans(ParametricBootstrapOutOfSample(nb_stocks_backtestOOS,risk_free,
+                                                                  colMeans(rets_window), cov_mat, 100, "maxdiv"))
+  
+  returns_minvol[i,1] <- weights_minvol[i,] %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+  returns_maxdiv[i,1] <- weights_maxdiv[i,] %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+  
+  returns_minvol_shrink[i,1] <- weights_minvol_shrink[i,] %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+  returns_maxdiv_shrink[i,1] <- weights_maxdiv_shrink[i,] %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+  
+  returns_minvol_resampling[i,1] <- weights_minvol_resampling[i,] %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+  returns_maxdiv_resampling[i,1] <- weights_maxdiv_resampling[i,] %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+  
+  returns_eq[i,1] <- weights_eq %*% t(rets[(i+initial_window),1:nb_stocks_backtestOOS])
+}
+
+df_oos_perf <- data.frame(date = dates[(1+initial_window):t], ret_minvol = c(1,cumprod(returns_minvol+1)), 
+                          ret_maxdiv = c(1,cumprod(returns_maxdiv+1)), ret_eq = c(1,cumprod(returns_eq+1)),
+                          ret_maxdiv_shrink = c(1,cumprod(returns_maxdiv_shrink+1)), 
+                          ret_minvol_shrink = c(1,cumprod(returns_minvol_shrink+1)),
+                          ret_minvol_resamp = c(1,cumprod(returns_minvol_resampling+1)),
+                          ret_maxdiv_resamp = c(1,cumprod(returns_maxdiv_resampling+1)))
+
+colors <- c("Equal_Weights" = "black", "Max_Div" = "midnightblue", "Min_Var" = "red2",
+            "Max_Div_Shrink" = "skyblue1", "Min_Var_Shrink" = "gold1",
+            "Max_Div_Resamp" ="purple4", "Min_Var_Resamp" = "hotpink1")
+
+oos_perf_analysis <- ggplot(data = df_oos_perf,aes(x=df_oos_perf$date)) + 
+                     geom_line(aes(y=df_oos_perf$ret_eq, color = "Equal_Weights")) +                       
+                     geom_line(aes(y=df_oos_perf$ret_maxdiv,color = "Max_Div"),linetype ="dashed") +
+                     geom_line(aes(y=df_oos_perf$ret_minvol, color= "Min_Var"),linetype ="twodash") + 
+                     ggtitle("Out-of-sample strategy performance") + 
+                     labs(x="Date", y="Cumulative returns of 1$", color = "Investment strategies") +
+                     theme_classic() + theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                     scale_colour_manual(values = colors)
+
+# descriptive statistic
+equal_weights_vol = sd(returns_eq)*sqrt(52)
+equal_weights_ret = mean(returns_eq)*52
+maxdiv_vol = sd(returns_maxdiv)*sqrt(52)
+maxdiv_ret = mean(returns_maxdiv)*52
+minvol_vol = sd(returns_minvol)*sqrt(52)
+minvol_ret = mean(returns_minvol)*52
+
+print(oos_perf_analysis)
+```
+
+Both optimisation methods allows for an increase in arithmetic annual returns which are respectively 10.30%, 11.95% and 12.93% for the equal weights, maximum diversification and minimum variance portfolio. The equal weights portfolio has the highest volatility at 15.12% while the minimum variance optimisation yield the best risk-adjusted returns with a volatility of 12.81% for 12.93% return. With the sample we studied, optimisation methods allows to generate both absolute and risk adjusted returns then the naive equal weights portfolio.
+
+We then compared the maximum diversification and minimum variance optimisation out-of-sample performance when using the LW srinkage method and parametric bootstrap to estimate the covariance matrix. 
+
+```{r}
+oos_perf_analysis_maxdiv <- ggplot(data = df_oos_perf,aes(x=df_oos_perf$date)) + 
+                            geom_line(aes(y=df_oos_perf$ret_maxdiv,color = "Max_Div")) +
+                            geom_line(aes(y=df_oos_perf$ret_maxdiv_shrink, color= "Max_Div_Shrink"),linetype ="twodash") + 
+                            geom_line(aes(y=df_oos_perf$ret_maxdiv_resamp, color= "Max_Div_Resamp"),linetype ="dashed") + 
+                            ggtitle("Out-of-sample strategy performance") + 
+                            labs(x="Date", y="Cumulative returns of 1$", color = "Investment strategies") +
+                            theme_classic() + theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                            scale_colour_manual(values = colors)
+
+print(oos_perf_analysis_maxdiv)
+
+```
+
+
+
+```{r}
+oos_perf_analysis_minvol <- ggplot(data = df_oos_perf,aes(x=df_oos_perf$date)) + 
+                            geom_line(aes(y=df_oos_perf$ret_minvol,color = "Min_Var")) +
+                            geom_line(aes(y=df_oos_perf$ret_minvol_shrink, color= "Min_Var_Shrink"),linetype ="twodash") + 
+                            geom_line(aes(y=df_oos_perf$ret_minvol_resamp, color= "Min_Var_Resamp"),linetype ="dashed") + 
+                            ggtitle("Out-of-sample strategy performance") + 
+                            labs(x="Date", y="Cumulative returns of 1$", color = "Investment strategies") +
+                            theme_classic() + theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                            scale_colour_manual(values = colors)
+
+print(oos_perf_analysis_minvol)
+```
+
+For both optimisation method, the shrinkage of the covariance matrix appear to increase returns  while the parametric resampling does not improve the performance of the strategy. The resampling of returns yield in average a quite similar covariance matrix which explain why the minimum variance and maximum diversification optimisation are very closed when using the sample and the average resampled covariance matrix as input of the optimisation.
+
+We performed a non-parametric bootstrap on the resulting returns of our different portfolios to see how the different performance measures vary over different scenarios. The 95% confidence interval was also calculated for each measure and the 2 lines represent the 2.5% percentile and the 97.5% percentile.
+
+```{r}
+#Resampling of different investment strategies based on the out-fo-sample methodlogy tested
+for (i in 1:n_sim){
+  
+  boot_b <- c()
+  
+  for (j in 1:n_blocks){
+    
+    id_blocks_start <- sample(x = 1:weeks_backtest, size = 1)
+    boot_b <- c(boot_b, c(1:weeks_backtest, 1:weeks_backtest)[id_blocks_start:(id_blocks_start+block_size-1)])
+    
+  }
+  
+  boot_block_samples[i,] <- boot_b[1:weeks_backtest]
+}
+
+#boot_eq <- ResamplingOutSample(returns_eq, risk_free, n_sim, boot_block_samples,weeks_backtest, nb_stocks_backtestOOS)
+
+boot_minvol <- ResamplingOutSample(returns_minvol, risk_free, n_sim, boot_block_samples,weeks_backtest, nb_stocks_backtestOOS)
+boot_minvol_shrink <- ResamplingOutSample(returns_minvol_shrink, risk_free, n_sim, 
+                                              boot_block_samples,weeks_backtest,nb_stocks_backtestOOS)
+
+boot_maxdiv <- ResamplingOutSample(returns_maxdiv, risk_free, n_sim, boot_block_samples,weeks_backtest, nb_stocks_backtestOOS)
+boot_maxdiv_shrink <- ResamplingOutSample(returns_maxdiv_shrink, risk_free, n_sim, 
+                                              boot_block_samples,weeks_backtest, nb_stocks_backtestOOS)
+
+df_resampling_minvol <- data.frame(boot_minvol$mu,boot_minvol$sigma,boot_minvol$sharpe,boot_minvol$VaR5)
+
+graph_boot_minvol_mu <- ggplot(data = df_resampling_minvol) + geom_histogram(aes(x=boot_minvol.mu),bins=10,fill="red2")+
+                               labs(x="Returns",y="Observations") + theme_classic() + 
+                               geom_vline(xintercept = boot_minvol$mu_95[1], linetype="dotted") +
+                               geom_vline(xintercept = boot_minvol$mu_95[2], linetype="dotted") 
+              
+graph_boot_minvol_sigma <- ggplot(data = df_resampling_minvol) + geom_histogram(aes(x=boot_minvol.sigma),bins=10,fill="red2")+
+                                  labs(x="Volatility",y="Observations") + theme_classic()+
+                                  geom_vline(xintercept = boot_minvol$sigma_95[1], linetype="dotted")+
+                                  geom_vline(xintercept = boot_minvol$sigma_95[2], linetype="dotted")
+  
+graph_boot_minvol_sharpe <- ggplot(data = df_resampling_minvol) + geom_histogram(aes(x=boot_minvol.sharpe),bins=10,fill="red2")+
+                                   labs(x="Sharpe ratio",y="Observations") + theme_classic()+
+                                   geom_vline(xintercept = boot_minvol$sharpe_95[1], linetype="dotted")+
+                                   geom_vline(xintercept = boot_minvol$sharpe_95[2], linetype="dotted")
+  
+graph_boot_minvol_VaR5 <- ggplot(data = df_resampling_minvol) + geom_histogram(aes(x=boot_minvol.VaR5),bins=5,fill="red2")+
+                                 labs(x="VaR 95",y="Observations") + theme_classic() +
+                                 geom_vline(xintercept = boot_minvol$VaR5_95[1], linetype="dotted")+
+                                 geom_vline(xintercept = boot_minvol$VaR5_95[2], linetype="dotted")
+
+figure <- ggarrange(graph_boot_minvol_mu,graph_boot_minvol_sigma,graph_boot_minvol_sharpe,
+                    graph_boot_minvol_VaR5,common.legend = TRUE, legend = "bottom")
+
+annotate_figure(figure, top = text_grob("Minimum variance resampling parameters distribution ", face = "bold", size = 12))
+```
+
+
+```{r}
+df_resampling_minvol_shrink <- data.frame(boot_minvol_shrink$mu,boot_minvol_shrink$sigma,
+                                          boot_minvol_shrink$sharpe,boot_minvol_shrink$VaR5)
+
+g_boot_minvol_shrink_mu <- ggplot(data = df_resampling_minvol_shrink) +
+                                  geom_histogram(aes(x=boot_minvol_shrink.mu),bins=10,fill="gold1")+
+                                  labs(x="Returns",y="Observations") + theme_classic() +
+                                  geom_vline(xintercept = boot_minvol_shrink$mu_95[1], linetype="dotted") +
+                                  geom_vline(xintercept = boot_minvol_shrink$mu_95[2], linetype="dotted") 
+
+g_boot_minvol_shrink_sigma <- ggplot(data = df_resampling_minvol_shrink) +
+                                     geom_histogram(aes(x=boot_minvol_shrink.sigma),bins=10,fill="gold1")+
+                                     labs(x="Volatility",y="Observations") + theme_classic() +
+                                     geom_vline(xintercept = boot_minvol_shrink$sigma_95[1], linetype="dotted") +
+                                     geom_vline(xintercept = boot_minvol_shrink$sigma_95[2], linetype="dotted") 
+
+g_boot_minvol_shrink_sharpe <- ggplot(data = df_resampling_minvol_shrink) +
+                                      geom_histogram(aes(x=boot_minvol_shrink.sharpe),bins=10,fill="gold1")+
+                                      labs(x="Sharpe ratio",y="Observations") + theme_classic() +
+                                      geom_vline(xintercept = boot_minvol_shrink$sharpe_95[1], linetype="dotted") +
+                                      geom_vline(xintercept = boot_minvol_shrink$sharpe_95[2], linetype="dotted") 
+
+g_boot_minvol_shrink_VaR5 <- ggplot(data = df_resampling_minvol_shrink) +
+                                    geom_histogram(aes(x=boot_minvol_shrink.VaR5),bins=8,fill="gold1")+
+                                    labs(x="VaR 95",y="Observations") + theme_classic() +
+                                    geom_vline(xintercept = boot_minvol_shrink$VaR5_95[1], linetype="dotted") +
+                                    geom_vline(xintercept = boot_minvol_shrink$VaR5_95[2], linetype="dotted") 
+
+figure2 <- ggarrange(g_boot_minvol_shrink_mu ,g_boot_minvol_shrink_sigma,
+                     g_boot_minvol_shrink_sharpe,g_boot_minvol_shrink_VaR5,
+                     common.legend = TRUE, legend = "bottom")
+
+annotate_figure(figure2, top = text_grob("Minimum variance with shrinkage parameters distribution ", 
+                                          face = "bold", size = 12))
+```
+
+```{r}
+df_resampling_maxdiv <- data.frame(boot_maxdiv$mu,boot_maxdiv$sigma,boot_maxdiv$sharpe,boot_maxdiv$VaR5)
+
+g_boot_maxdiv_mu <- ggplot(data = df_resampling_maxdiv) + 
+                           geom_histogram(aes(x=boot_maxdiv.mu),bins=10,fill="midnightblue")+
+                           labs(x="Returns",y="Observations") + theme_classic() +
+                           geom_vline(xintercept = boot_maxdiv$mu_95[1], linetype="dotted") +
+                           geom_vline(xintercept = boot_maxdiv$mu_95[2], linetype="dotted") 
+
+g_boot_maxdiv_sigma <- ggplot(data = df_resampling_maxdiv) +
+                              geom_histogram(aes(x=boot_maxdiv.sigma),bins=10,fill="midnightblue")+
+                              labs(x="Volatility",y="Observations") + theme_classic() +
+                              geom_vline(xintercept = boot_maxdiv$sigma_95[1], linetype="dotted") +
+                              geom_vline(xintercept = boot_maxdiv$sigma_95[2], linetype="dotted") 
+
+g_boot_maxdiv_sharpe <- ggplot(data = df_resampling_maxdiv) +
+                               geom_histogram(aes(x=boot_maxdiv.sharpe),bins=10,fill="midnightblue")+
+                               labs(x="Sharpe ratio",y="Observations") + theme_classic() +
+                               geom_vline(xintercept = boot_maxdiv$sharpe_95[1], linetype="dotted") +
+                               geom_vline(xintercept = boot_maxdiv$sharpe_95[2], linetype="dotted") 
+
+g_boot_maxdiv_VaR5 <- ggplot(data = df_resampling_maxdiv) +
+                             geom_histogram(aes(x=boot_maxdiv.VaR5),bins=5,fill="midnightblue")+
+                             labs(x="VaR 95",y="Observations") + theme_classic() +
+                             geom_vline(xintercept = boot_maxdiv$VaR5_95[1], linetype="dotted") +
+                             geom_vline(xintercept = boot_maxdiv$VaR5_95[2], linetype="dotted") 
+
+figure3 <- ggarrange(g_boot_maxdiv_mu,g_boot_maxdiv_sigma,g_boot_maxdiv_sharpe,
+                     g_boot_maxdiv_VaR5,common.legend = TRUE, legend = "bottom")
+
+annotate_figure(figure3, top = text_grob("Maximum diversification parameters distribution ", face = "bold", size = 12))
+```
+
+```{r}
+df_resampling_maxdiv_shrink <- data.frame(boot_maxdiv_shrink$mu,boot_maxdiv_shrink$sigma,
+                                          boot_maxdiv_shrink$sharpe,boot_maxdiv_shrink$VaR5)
+
+g_boot_maxdiv_shrink_mu <- ggplot(data = df_resampling_maxdiv_shrink) + 
+                           geom_histogram(aes(x=boot_maxdiv_shrink.mu),bins=10,fill="skyblue1")+
+                           labs(x="Returns",y="Observations") + theme_classic() +
+                           geom_vline(xintercept = boot_maxdiv_shrink$mu_95[1], linetype="dotted") +
+                           geom_vline(xintercept = boot_maxdiv_shrink$mu_95[2], linetype="dotted") 
+
+
+g_boot_maxdiv_shrink_sigma <- ggplot(data = df_resampling_maxdiv_shrink) +
+                              geom_histogram(aes(x=boot_maxdiv_shrink.sigma),bins=10,fill="skyblue1")+
+                              labs(x="Volatility",y="Observations") + theme_classic() +
+                              geom_vline(xintercept = boot_maxdiv_shrink$sigma_95[1], linetype="dotted") +
+                              geom_vline(xintercept = boot_maxdiv_shrink$sigma_95[2], linetype="dotted") 
+
+g_boot_maxdiv_shrink_sharpe <- ggplot(data = df_resampling_maxdiv_shrink) +
+                               geom_histogram(aes(x=boot_maxdiv_shrink.sharpe),bins=10,fill="skyblue1")+
+                               labs(x="Sharpe ratio",y="Observations") + theme_classic() +
+                               geom_vline(xintercept = boot_maxdiv_shrink$sharpe_95[1], linetype="dotted") +
+                               geom_vline(xintercept = boot_maxdiv_shrink$sharpe_95[2], linetype="dotted") 
+
+g_boot_maxdiv_shrink_VaR5 <- ggplot(data = df_resampling_maxdiv_shrink) +
+                             geom_histogram(aes(x=boot_maxdiv_shrink.VaR5),bins=5,fill="skyblue1")+
+                             labs(x="VaR 95",y="Observations") + theme_classic() +
+                             geom_vline(xintercept = boot_maxdiv_shrink$VaR5_95[1], linetype="dotted") +
+                             geom_vline(xintercept = boot_maxdiv_shrink$VaR5_95[2], linetype="dotted") 
+
+
+figure4 <- ggarrange(g_boot_maxdiv_shrink_mu,g_boot_maxdiv_shrink_sigma,g_boot_maxdiv_shrink_sharpe,
+                     g_boot_maxdiv_shrink_VaR5,common.legend = TRUE, legend = "bottom")
+
+annotate_figure(figure4, top = text_grob("Maximum diversification shrinkage parameters distribution ", 
+                                         face = "bold", size = 12))
+```
+# Out-Of-Sample with heuristic search
+
+To perform the allocation scheme using the heuristic search to invest in 5 to 20 stocks, we implemented a simulated annealing searching method and we used the neighbour function that was presented in class. However, there were slight issues in the function that we had to fix. For example, we changed the way the number of assets were calculated by using the function length instead of the function sum. We also changed the methodology of integrating or removing stocks.
+
+The objective function of our heuristic search was the diversification ratio. We did the search 50 times with different initialization values and the optimum was always the same given that the problem is quite simple. We first tested it using an equally-weighted portfolio for each iteration and then proceeded to backtest the cumulative returns and compare them to 3 other policies: Maximum diversification with 49 stocks, Minimum volatility with 49 stocks and the equally-weighted portfolio with 49 stocks. 
+
+Then, we tried using the optimized portfolio, which maximizes the diversification ratio for each iteration. This approach gives a portfolio with more stocks because this optimization permits that the weights of certain stocks be equal to zero. This requires much more computational time so we decided not to backtest it.
+
+```{r}
+#Out-of-sample Heuristic
+library("NMOF")
+
+
+#Find the maximum diversification/ERC with 5 to 20 stocks with simulated annealing
+K_inf <- 5
+K_sup <- 20
+M2 <- cov(rets)
+n_a <- ncol(M2)
+info <- list(Sigma = M2, K_inf = K_inf, K_sup = K_sup, n_a = n_a, n_n = 1)
+
+#First initialization
+x0 <- f_x0(info)
+
+algo <- list(x0 = x0,
+            neighbour = f_neighbour,
+            nS = 5000 / 10,
+            nT = 10,
+            printDetail = FALSE,
+            printBar = FALSE)
+
+#Maximum Diversification
+#Equal-Weighted
+fit_SA_equalw <- SAopt(f_obj_maxdiv_equalw, algo = algo, info = info) 
+
+#Backtest OOS with heuristic
+initial_window = 52
+
+N = ncol(rets)
+t = nrow(rets)
+
+weights_heuristic <- matrix(nrow=t-initial_window, ncol=N)
+weights_minvol <- matrix(nrow=t-initial_window, ncol=N)
+weights_maxdiv <- matrix(nrow=t-initial_window, ncol=N)
+weights_eq <- rep(1/N,N)
+
+returns_heuristic <- matrix(nrow=t-initial_window-1,1)
+returns_minvol <- matrix(nrow=t-initial_window-1,1)
+returns_maxdiv <- matrix(nrow=t-initial_window-1,1)
+returns_eq <- matrix(nrow=t-initial_window-1,1)
+
+K_inf <- 5
+K_sup <- 20
+
+for (i in 1:(t-initial_window-1)){
+  
+    cov_mat = cov(rets[i:(i+initial_window-1)])
+    
+    info <- list(Sigma = cov_mat, K_inf = K_inf, K_sup = K_sup, n_a = ncol(cov_mat), n_n = 1)
+    
+    fit_SA_equalw <- SAopt(f_obj_maxdiv_equalw, algo = algo, info = info)
+    id_stocks <- fit_SA_equalw$xbest
+    vec <- rep(0, N)
+    vec[id_stocks] <- 1
+    weights_heuristic[i,] <- (1/length(id_stocks)) * vec
+    
+    weights_minvol[i,] <- optimalPortfolio(cov_mat, control=list(type="minvol", constraint = 'lo'))
+    weights_maxdiv[i,] <- optimalPortfolio(cov_mat, control=list(type="maxdiv", constraint = 'lo'))
+  
+    returns_heuristic[i,1] <- weights_heuristic[i,] %*% t(rets[(i+initial_window)])
+    returns_minvol[i,1] <- weights_minvol[i,] %*% t(rets[(i+initial_window)])
+    returns_maxdiv[i,1] <- weights_maxdiv[i,] %*% t(rets[(i+initial_window)])
+    returns_eq[i,1] <- weights_eq %*% t(rets[(i+initial_window)])
+}
+
+
+df_oos_perf_heur <- data.frame(date = dates[(1+initial_window):t],
+                          ret_heur = c(1,cumprod(returns_heuristic+1)),
+                          ret_minvol = c(1,cumprod(returns_minvol+1)), 
+                          ret_maxdiv = c(1,cumprod(returns_maxdiv+1)), 
+                          ret_eq = c(1,cumprod(returns_eq+1)))
+
+colors<- c("Equal_Weights" = "black", "Heuristic" = "seagreen1" , "Max_Div" = "midnightblue", "Min_Var" = "red2")
+
+oos_perf_analysis_heur <- ggplot(data = df_oos_perf_heur, aes(x=df_oos_perf_heur$date)) +
+                          geom_line(aes(y=df_oos_perf_heur$ret_eq, color = "Equal_Weights")) +
+                          geom_line(aes(y=df_oos_perf_heur$ret_heur, color= "Heuristic")) +
+                          geom_line(aes(y=df_oos_perf_heur$ret_maxdiv,color = "Max_Div"),linetype ="dashed") +
+                          geom_line(aes(y=df_oos_perf_heur$ret_minvol, color = "Min_Var") , linetype ="twodash") +
+                          ggtitle("Out-of-sample strategy performance") + 
+                          labs(x="Date", y="Cumulative returns of 1$", color = "Investment strategies") +
+                          theme_classic() + theme(plot.title = element_text(hjust = 0.5 ,size = 12)) +
+                          scale_colour_manual(values = colors)
+
+# Optimized portfolio related to the third paragraph 
+fit_SA_optimized <- SAopt(f_obj_maxdiv_optimized, algo = algo, info = info)
+weights_optimized <- optimalPortfolio(info$Sigma[fit_SA_optimized$xbest, fit_SA_optimized$xbest],
+                                      control=list(type="maxdiv", constraint = 'lo'))
+
+#We repeate the simulation 100 times with different initialization
+n_rep <- 50
+obj_SA <- rep(NA, n_rep)
+
+for (i in 1:n_rep) {
+  algo$x0 <- f_x0(info)
+  obj_SA[i] <- SAopt(f_obj_maxdiv_equalw, algo = algo, info = info)$OFvalue
+}
+
+print(oos_perf_analysis_heur)
+```
+
+An Out-of-sample backtest was also produced for the heursistic method, rebalancing at each week and applying the heuristic search. As we can see, the heuristic method follows the maximum diversification portfolio which is not surprising considering it takes 5 to 20 stocks out of the total 49 stocks based on maximizing the diversification ratio.
